@@ -12,6 +12,33 @@ BOOTARGS="${BOOTARGS:-earlycon console=ttySAC0,1500000 debug loglevel=8 initcall
 PYTHON="${PYTHON:-python3}"
 BAUD="${BAUD:-500000}"
 HOST_OS="$(uname -s)"
+WAIT_LOG_INTERVAL="${WAIT_LOG_INTERVAL:-5}"
+WAIT_TIMEOUT="${WAIT_TIMEOUT:-0}"
+
+ts() {
+    date '+%H:%M:%S'
+}
+
+list_seen_devs() {
+    case "$HOST_OS" in
+        Darwin)
+            for dev in /dev/cu.usbmodem*; do
+                [ -e "$dev" ] && printf ' %s' "$dev"
+            done
+            ;;
+        Linux)
+            for dev in /dev/ttyACM*; do
+                [ -e "$dev" ] && printf ' %s' "$dev"
+            done
+            ;;
+        *)
+            for dev in /dev/cu.usbmodem* /dev/ttyACM*; do
+                [ -e "$dev" ] && printf ' %s' "$dev"
+            done
+            ;;
+    esac
+    return 0
+}
 
 find_proxy_dev() {
     if [ -n "${M1N1DEVICE:-}" ] && [ -e "$M1N1DEVICE" ]; then
@@ -96,14 +123,35 @@ fi
 printf 'Host OS: %s\n' "$HOST_OS"
 printf 'Waiting for m1n1 USB proxy device on this host...\n'
 printf 'Boot the target Mac into the M4 Pro Linux diagnostic entry now.\n'
+printf 'Wait timeout: %s seconds (0 means no timeout)\n' "$WAIT_TIMEOUT"
 printf 'Press Ctrl-C here to stop waiting.\n\n'
 
 proxy_dev=""
+wait_elapsed=0
 while [ -z "$proxy_dev" ]; do
     if proxy_dev="$(find_proxy_dev)"; then
         break
     fi
     sleep 1
+    wait_elapsed=$((wait_elapsed + 1))
+
+    if [ "$WAIT_LOG_INTERVAL" -gt 0 ] && [ $((wait_elapsed % WAIT_LOG_INTERVAL)) -eq 0 ]; then
+        seen_devs="$(list_seen_devs)"
+        if [ -n "$seen_devs" ]; then
+            printf '[%s] Still waiting after %ss; currently visible candidate devices:%s\n' \
+                "$(ts)" "$wait_elapsed" "$seen_devs"
+        else
+            printf '[%s] Still waiting after %ss; no candidate USB serial devices visible.\n' \
+                "$(ts)" "$wait_elapsed"
+        fi
+    fi
+
+    if [ "$WAIT_TIMEOUT" -gt 0 ] && [ "$wait_elapsed" -ge "$WAIT_TIMEOUT" ]; then
+        printf 'Timed out after %s seconds waiting for an m1n1 USB proxy device.\n' "$wait_elapsed" >&2
+        printf 'This means the host did not see the expected USB serial device.\n' >&2
+        printf 'Next checks: data-capable cable, another target USB-C/TB port, and confirming the target booted the diagnostic entry.\n' >&2
+        exit 2
+    fi
 done
 
 secondary_dev=""

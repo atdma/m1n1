@@ -52,7 +52,13 @@ cd m1n1
 M1N1_DIR="$PWD" MODE=shell ./host-m4pro-debug/host-m1n1-catch-and-boot.sh
 ```
 
-The script will wait for the m1n1 USB serial device.
+The script will wait for the m1n1 USB serial device. For a bounded diagnostic
+retry with periodic status output, use:
+
+```sh
+M1N1_DIR="$PWD" WAIT_TIMEOUT=120 WAIT_LOG_INTERVAL=5 MODE=shell \
+  ./host-m4pro-debug/host-m1n1-catch-and-boot.sh
+```
 
 Expected device names:
 

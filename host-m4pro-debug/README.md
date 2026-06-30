@@ -1,6 +1,6 @@
 # M4 Pro m1n1 host debug kit
 
-This directory is for catching the `Mac16,8` / `J614sAP` M4 Pro diagnostic boot in `m1n1` proxy mode from a second Mac.
+This directory is for catching the `Mac16,8` / `J614sAP` M4 Pro diagnostic boot in `m1n1` proxy mode from a second Mac or Linux host.
 
 The target Mac's diagnostic ESP has been changed so `m1n1/boot-linux-direct.bin` is now proxy-only m1n1, not the direct Linux payload. The expected next boot is therefore `m1n1` proxy mode, not Linux.
 
@@ -12,15 +12,15 @@ The target Mac's diagnostic ESP has been changed so `m1n1/boot-linux-direct.bin`
 
 ## Hardware setup
 
-1. Use a second Mac as the host.
+1. Use a second Mac or Linux machine as the host.
 2. Shut down the M4 target Mac.
 3. Connect host and target with a data-capable USB-C cable.
 4. Use a Thunderbolt/USB-C port on the M4 target.
 5. Keep the target connected to power if possible.
 
-## Prepare the host Mac
+## Prepare the host
 
-Clone this repo on the second Mac:
+Clone this repo on the host:
 
 ```sh
 git clone https://github.com/atdma/m1n1.git
@@ -39,16 +39,32 @@ Make the helper executable:
 chmod +x host-m4pro-debug/host-m1n1-catch-and-boot.sh
 ```
 
+On Linux, if `/dev/ttyACM*` exists but the script cannot open it, add your user
+to the relevant serial device group or run the helper with `sudo -E`. Common
+groups are `dialout`, `uucp`, or `plugdev`.
+
 ## First test: catch m1n1 proxy shell
 
-Run this on the host Mac:
+Run this on the host:
 
 ```sh
 cd m1n1
 M1N1_DIR="$PWD" MODE=shell ./host-m4pro-debug/host-m1n1-catch-and-boot.sh
 ```
 
-The script will wait for `/dev/cu.usbmodem*`.
+The script will wait for the m1n1 USB serial device.
+
+Expected device names:
+
+- macOS: `/dev/cu.usbmodemP_01` and `/dev/cu.usbmodemP_03`
+- Linux: `/dev/ttyACM0` and `/dev/ttyACM1`
+
+If auto-detection picks the wrong device, set it explicitly:
+
+```sh
+M1N1DEVICE=/dev/ttyACM0 M1N1SECDEVICE=/dev/ttyACM1 \
+M1N1_DIR="$PWD" MODE=shell ./host-m4pro-debug/host-m1n1-catch-and-boot.sh
+```
 
 Now boot the target Mac:
 
@@ -68,7 +84,7 @@ Exit the shell with `Ctrl-D`.
 
 ## Optional secondary console
 
-To open the secondary m1n1 console in another Terminal window:
+To open or print instructions for the secondary m1n1 console:
 
 ```sh
 cd m1n1
@@ -79,7 +95,7 @@ M1N1_DIR="$PWD" OPEN_SECONDARY_CONSOLE=1 MODE=shell ./host-m4pro-debug/host-m1n1
 
 Only do this after `MODE=shell` works.
 
-Run this on the host Mac:
+Run this on the host:
 
 ```sh
 cd m1n1
@@ -101,12 +117,51 @@ python3 proxyclient/tools/linux.py \
   -b 'earlycon console=ttySAC0,1500000 debug loglevel=8 initcall_debug root=/dev/ram0 rdinit=/init'
 ```
 
+## Linux host notes
+
+Install dependencies with your distro package manager if needed:
+
+```sh
+sudo apt install python3 python3-pip git screen
+```
+
+or:
+
+```sh
+sudo dnf install python3 python3-pip git screen
+```
+
+Then install Python requirements:
+
+```sh
+python3 -m pip install --user -r proxyclient/requirements.txt
+```
+
+If permissions block `/dev/ttyACM0`, either run:
+
+```sh
+sudo -E M1N1_DIR="$PWD" MODE=shell ./host-m4pro-debug/host-m1n1-catch-and-boot.sh
+```
+
+or add your user to the serial device group and log out/in:
+
+```sh
+sudo usermod -aG dialout "$USER"
+```
+
 ## If no USB device appears
 
-On the host Mac, check:
+On macOS, check:
 
 ```sh
 ls /dev/cu.usbmodem*
+```
+
+On Linux, check:
+
+```sh
+ls /dev/ttyACM*
+dmesg | tail -50
 ```
 
 If nothing appears:
